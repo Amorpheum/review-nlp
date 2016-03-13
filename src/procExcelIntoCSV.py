@@ -1,6 +1,6 @@
 import pandas as pd
 
-filename = raw_input('Enter the data filename (exclude the ext):') or 'data'
+filename = raw_input('Enter the data filename (exclude the ext): ') or 'data'
 wb = pd.ExcelFile('../raw/' + str(filename) + '.xlsx')
 
 # Ignore the first 3 sheets [Contents, URLGenerator and Formula] 
@@ -27,7 +27,7 @@ for sheetName in sheetNames:
             break
         c += 1
 
-    df.to_csv('../proc/' + rename.rstrip() + '.csv', encoding='utf=8', index=False)
+    df.to_csv('../proc/basecsvs/' + rename.rstrip() + '.csv', encoding='utf=8', index=False)
     line_ctr += len(df)
 
 print 'Number of products:', len(sheetNames)
