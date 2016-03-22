@@ -12,11 +12,13 @@ def stripPunctuation(text):
 def removeNonASCII(text):
     return re.sub(r'[^\x00-\x7F]+', '', str(text))
 
+def removeHyphen(text):
+    return re.sub('-+', ' ', str(text))
+
 def parseToSentences(text):
-    return nltk.tokenize.sent_tokenize(removeNonASCII(text))
+    return nltk.tokenize.sent_tokenize(removeHyphen(removeNonASCII(text)))
 
 def cleanText(text):
-
     # remove non-ascii characters, lower, then tokenize text
     tokens = nltk.word_tokenize(stripPunctuation(removeNonASCII(text)).lower())
 

@@ -17,6 +17,8 @@ for f in filenames:
 
     # Parse into sentences
     sdf = df[['rev_text']].applymap(parseToSentences)
+    # for line in sdf['rev_text'].iloc[0]:
+    #     print line
 
     for review in sdf['rev_text']:
         # print sdf['rev_text']
