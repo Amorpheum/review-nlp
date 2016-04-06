@@ -1,22 +1,19 @@
 from classifyUtils import *
 from nltk.classify import NaiveBayesClassifier
-from sklearn.svm import SVC
 import pandas as pd
 import numpy as np
 import math
 import sys
-import nltk.classify
-
 
 
 # Global constants
 verbose = True
 train_sample_rate = 0.9
 input_col = 'rev_text_lemm'
-coded_lines = 4998 # DEBUG temp var until all lines have been coded
-# feature = eval("unigram_boolean_features")
-# feature = eval('unigram_tfidf_features')
-feature = eval(sys.argv[1])
+# DEBUG coded_lines temp var until all lines have been coded
+coded_lines = sys.argv[2] if len(sys.argv) > 2 else 4998
+feature = eval(sys.argv[1]) if len(sys.argv) > 1 else unigram_boolean_features
+
 
 df = pd.read_excel('../proc/sentences_lemm_lab.xlsx')[1:coded_lines+1]
 d = {'dimension': [], 'mif': [], 'pos_accuracy': [], 'pos_precision': [], 'pos_recall': [], 'pos_fmeasure': [], 'neg_accuracy': [], 'neg_precision': [], 'neg_recall': [], 'neg_fmeasure': [], 'ave_accuracy': [], 'ave_precision': [], 'ave_recall': [], 'ave_fmeasure': []}
@@ -50,15 +47,12 @@ for dimension in dimensions:
     test_set = pos_test + neg_test
 
     # train the NaiveBayes classifier
-    # classifier = NaiveBayesClassifier.train(train_set)
-    classifier = nltk.classify.SklearnClassifier(SVC())
-    classifier.train(train_set)
+    classifier = NaiveBayesClassifier.train(train_set)
 
     # Run evaluations
     if verbose:
         print_basic_info(dimension, feature.__name__, (len(neg_test), len(pos_test), len(neg_training), len(pos_training)))
-    mif = ''
-    # mif = show_most_informative_features(classifier, 15)
+    mif = show_most_informative_features(classifier, 15)
     for line in mif:
         print line
     results = do_evaluation(test_set, classifier, verbose=verbose)
@@ -83,4 +77,4 @@ for dimension in dimensions:
 
 out_df = pd.DataFrame(d, columns=['dimension', 'mif', 'pos_accuracy', 'pos_precision', 'pos_recall', 'pos_fmeasure', 'neg_accuracy', 'neg_precision', 'neg_recall', 'neg_fmeasure', 'ave_accuracy', 'ave_precision', 'ave_recall', 'ave_fmeasure'])
 
-out_df.to_excel('../proc/perf_' + feature.__name__ + '.xlsx', index=False)
+out_df.to_excel('../proc/perf_nb_' + feature.__name__ + '.xlsx', index=False)

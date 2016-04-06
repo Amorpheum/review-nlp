@@ -1,87 +1,83 @@
-def unigram_features(words):
-    return dict((word, True) for word in words)
-
-def extract_features(corpus, file_ids, cls, feature_extractor=unigram_features):
-    return [(feature_extractor(corpus.words(i)), cls) for i in file_ids]
-
-def get_words_from_corpus (corpus, file_ids): 
-    for file_id in file_ids: 
-        words = corpus.words(file_id) 
-        for word in words: 
-            yield word
-
-from nltk.corpus import movie_reviews as mr
-from nltk.classify import NaiveBayesClassifier
+from classifyUtils import *
 import nltk.classify
-from sklearn.svm import NuSVC
-
-data = dict(pos = mr.fileids('pos'), neg = mr.fileids('neg'))
-
-# Use 90% of the data for training 
-neg_training = extract_features(mr, data['neg'][:900], 'neg', feature_extractor=unigram_features) 
-# Use 10% for testing the classifier on unseen data. 
-neg_test = extract_features(mr, data['neg'][900:], 'neg', feature_extractor=unigram_features) 
-pos_training = extract_features(mr, data['pos'][:900],'pos', feature_extractor=unigram_features) 
-pos_test = extract_features(mr, data['pos'][900:],'pos', feature_extractor=unigram_features) 
-train_set = pos_training + neg_training 
-test_set = pos_test + neg_test
-
-# classifier = NaiveBayesClassifier.train(train_set)
-classifier = nltk.classify.SklearnClassifier(NuSVC())
-classifier.train(train_set)
-
-predicted_label0 = classifier.classify(pos_test[0][0]) 
-print 'Predicted: %s Actual: pos' % (predicted_label0,) 
-predicted_label1 = classifier.classify(neg_test[0][0]) 
-print 'Predicted: %s Actual: neg' % (predicted_label1,)
-
-print 'Inception is the best movie ever:', classifier.classify(unigram_features('Inception is the best movie ever'.split()))
-
-print "I don't know how anyone could sit through Inception:",  classifier.classify(unigram_features("I don't know how anyone could sit through Inception".split()))
+from sklearn.svm import SVC
+import pandas as pd
+import numpy as np
+import math
+import sys
 
 
-# classifier.show_most_informative_features()
+# Global constants
+verbose = True
+train_sample_rate = 0.9
+input_col = 'rev_text_lemm'
+# DEBUG coded_lines temp var until all lines have been coded
+coded_lines = sys.argv[2] if len(sys.argv) > 2 else 4998
+feature = eval(sys.argv[1]) if len(sys.argv) > 1 else unigram_boolean_features
 
 
-def do_evaluation (pairs, pos_cls='pos', verbose=True): 
-    N = len(pairs) 
-    (ctr,correct, tp, tn, fp,fn) = (0,0,0,0,0,0) 
-    for (predicted, actual) in pairs: 
-        ctr += 1 
-        if predicted == actual: 
-            correct += 1 
-            if actual == pos_cls: 
-                tp += 1 
-            else: 
-                tn += 1 
-        else: 
-            if actual == pos_cls: 
-                fp += 1 
-            else: 
-                fn += 1 
-    (accuracy, precision, recall) = (float(correct)/N,float(tp)/(tp + fp),float(tp)/(tp + fn)) 
-    if verbose: 
-        print_results(precision, recall, accuracy, pos_cls) 
-    return (accuracy, precision, recall)
+df = pd.read_excel('../proc/sentences_lemm_lab.xlsx')[1:coded_lines+1]
+d = {'dimension': [], 'pos_accuracy': [], 'pos_precision': [], 'pos_recall': [], 'pos_fmeasure': [], 'neg_accuracy': [], 'neg_precision': [], 'neg_recall': [], 'neg_fmeasure': [], 'ave_accuracy': [], 'ave_precision': [], 'ave_recall': [], 'ave_fmeasure': []}
 
-def print_results (precision, recall, accuracy, pos_cls): 
-    banner = 'Evaluation with pos_cls = %s' % pos_cls 
-    print 
-    print banner 
-    print '=' * len(banner) 
-    print '%-10s %.1f' % ('Precision',precision*100) 
-    print '%-10s %.1f' % ('Recall',recall*100) 
-    print '%-10s %.1f' % ('Accuracy',accuracy*100)
+# Randomise the order of the lines
+# df = df.iloc[np.random.permutation(len(df))]
 
-pairs = [(classifier.classify(example), actual) for (example, actual) in test_set] 
-do_evaluation (pairs) 
-do_evaluation (pairs, pos_cls='neg')
+class_labels = (0, -1, 1)   # useful labels being (-1, 1)
+dimensions = df.columns.values[5:]  # DEBUG array should read [5:], [5:6] is for testing
 
+for dimension in dimensions:
+    # split the data into class labels (e.g., pos and neg, or more), approx 10% for test, 90% for train
+    data = dict(pos = df[df[dimension].isin(class_labels[1:])], neg = df[~df[dimension].isin(class_labels[1:])])
 
+    # get number of samples for the training sets
+    (neg_train, pos_train) = (
+        sample_dataset(
+            data['neg'][dimension], train_sample_rate), 
+        sample_dataset(
+            data['pos'][dimension], train_sample_rate))
 
+    # Extract the features
+    (neg_training, neg_test, pos_training, pos_test) = (
+        extract_features(data['neg'][input_col][:neg_train], 'neg', feature_extractor=feature),
+        extract_features(data['neg'][input_col][neg_train:], 'neg', feature_extractor=feature),
+        extract_features(data['pos'][input_col][:pos_train], 'pos', feature_extractor=feature),
+        extract_features(data['pos'][input_col][pos_train:], 'pos', feature_extractor=feature)
+        )
 
+    train_set = pos_training + neg_training
+    test_set = pos_test + neg_test
 
+    # train the SVM
+    classifier = nltk.classify.SklearnClassifier(SVC())
+    classifier.train(train_set)
 
+    # Run evaluations
+    if verbose:
+        print_basic_info(dimension, feature.__name__, (len(neg_test), len(pos_test), len(neg_training), len(pos_training)))
+    # mif = ''
+    # mif = show_most_informative_features(classifier, 15)
+    # for line in mif:
+    #     print line
+    results = do_evaluation(test_set, classifier, verbose=verbose)
 
+    # Store into dict d for df
+    d['dimension'].append(dimension)
+    # d['mif'].append(mif[1:])
+    d['pos_accuracy'].append(results['pos']['accuracy'])
+    d['pos_precision'].append(results['pos']['precision'])
+    d['pos_recall'].append(results['pos']['recall'])
+    d['pos_fmeasure'].append(results['pos']['fmeasure'])
 
+    d['neg_accuracy'].append(results['neg']['accuracy'])
+    d['neg_precision'].append(results['neg']['precision'])
+    d['neg_recall'].append(results['neg']['recall'])
+    d['neg_fmeasure'].append(results['neg']['fmeasure'])
 
+    d['ave_accuracy'].append(results['ave']['accuracy'])
+    d['ave_precision'].append(results['ave']['precision'])
+    d['ave_recall'].append(results['ave']['recall'])
+    d['ave_fmeasure'].append(results['ave']['fmeasure'])
+
+out_df = pd.DataFrame(d, columns=['dimension', 'pos_accuracy', 'pos_precision', 'pos_recall', 'pos_fmeasure', 'neg_accuracy', 'neg_precision', 'neg_recall', 'neg_fmeasure', 'ave_accuracy', 'ave_precision', 'ave_recall', 'ave_fmeasure'])
+
+out_df.to_excel('../proc/perf_svm_' + feature.__name__ + '.xlsx', index=False)
