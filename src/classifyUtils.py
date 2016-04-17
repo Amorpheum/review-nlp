@@ -1,5 +1,7 @@
 import numpy as np
 import math
+import pandas as pd
+from nltk.metrics import scores
 
 """
 Features
@@ -46,12 +48,16 @@ def sample_dataset(sample_array, sample_rate=0.9):
 """
 Turns a set of sentences all belonging to one class into a list of (feature dictionary, cls) pairs, to be used in testing or training a classifier.
 """
-def extract_features(corpus, cls, feature_extractor=unigram_boolean_features):
-    if feature_extractor is unigram_tfidf_features:
-        idf = computeidf(corpus)
-        return [(feature_extractor(str(string).split(), idf), cls) for string in corpus]
+def extract_features(corpus, cls=None, feature_extractor=unigram_boolean_features):
+    if cls is not None:
+        if feature_extractor is unigram_tfidf_features:
+            idf = computeidf(corpus)
+            return [(feature_extractor(str(string).split(), idf), cls) for string in corpus]
+        else:
+            return [(feature_extractor(str(string).split()), cls) for string in corpus]
     else:
-        return [(feature_extractor(str(string).split()), cls) for string in corpus]
+        # return an array of arrays of features
+        return [feature_extractor(str(string).split()) for string in corpus]
 
 """
 Evaluation
@@ -75,9 +81,8 @@ def do_evaluation(test_set, classifier, verbose=True):
     # Compute the stats for pos and neg cases
     for label in ['pos', 'neg']:
         N = len(pairs)
-        (ctr, correct, tp, tn, fp, fn) = (0,0,0,0,0,0)
+        (correct, tp, tn, fp, fn) = (0,0,0,0,0)
         for (predicted, actual) in pairs:
-            ctr += 1
             if predicted == actual:
                 correct += 1
                 if actual == label:
@@ -86,27 +91,30 @@ def do_evaluation(test_set, classifier, verbose=True):
                     tn += 1
             else:
                 if actual == label:
-                    fp += 1
-                else:
                     fn += 1
+                else:
+                    fp += 1
 
         accuracy = float(correct)/N
-        precision = float(tp)/(tp + fp) if (tp + fp) != 0 else np.nan
-        recall = float(tp)/(tp + fn) if (tp + fn) != 0 else np.nan
-        fmeasure = 2 * (precision * recall) / (precision + recall)
+        precision = float(tp)/(tp + fp) if (tp + fp) != 0 else 0
+        recall = float(tp)/(tp + fn) if (tp + fn) != 0 else 0
+        fmeasure = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
+        support = tp + fn
 
         results[label] = {}
         results[label]['accuracy'] = accuracy
         results[label]['precision'] = precision
         results[label]['recall'] = recall
         results[label]['fmeasure'] = fmeasure
+        results[label]['support'] = support
 
     # Compute the ave of pos and neg
     results['ave'] = {}
     results['ave']['accuracy'] = (results['pos']['accuracy'] + results['neg']['accuracy']) / 2
     results['ave']['precision'] = (results['pos']['precision'] + results['neg']['precision']) / 2
     results['ave']['recall'] = (results['pos']['recall'] + results['neg']['recall']) / 2
-    results['ave']['fmeasure'] = (results['pos']['fmeasure'] + results['neg']['fmeasure']) / 2    
+    results['ave']['fmeasure'] = (results['pos']['fmeasure'] + results['neg']['fmeasure']) / 2
+    results['ave']['support'] = results['pos']['support'] + results['neg']['support']
 
     if verbose:
         print_results(results)
@@ -125,6 +133,7 @@ def print_results(results):
         print '%-10s %.1f' % ('Precision', value['precision']*100)
         print '%-10s %.1f' % ('Recall', value['recall']*100)
         print '%-10s %.1f' % ('F-measure', value['fmeasure']*100)
+        print '%-10s %.1f' % ('Support', value['support'])
 
 def generate_pairs(test_set, classifier):
     return [(classifier.classify(example), actual) for (example, actual) in test_set]
@@ -160,6 +169,10 @@ def show_most_informative_features(self, n=10):
 """
 Others
 """
+def stratified_k_fold():
+    pass
+
+
 def computeidf(corpus): # words = document, corpus = all documents
     N = len(corpus)
     d = {}
@@ -178,6 +191,67 @@ def computeidf(corpus): # words = document, corpus = all documents
 
     return {k: math.log(N/v) for k, v in d.iteritems()}
 
+# This is an implementation of StratifiedKFold cross validation
+def cross_validation_folds(data, dimension, kfolds):
+    folded = {}
+    folded['neg'] = []
+    folded['pos'] = []
+    folds = {}
+    folds['neg'] = []
+    folds['pos'] = []
+
+    neg = data['neg'][dimension]
+    pos = data['pos'][dimension]
+
+    sample_rate = 1.0 / kfolds
 
 
+    # print len(neg), len(pos)
+
+    neg_samp = int(len(neg) * sample_rate)
+    pos_samp = int(len(pos) * sample_rate)
+
+    for i in range(kfolds):
+        if i != (kfolds - 1):
+            folds['pos'].append(pos[i*pos_samp:(i+1)*pos_samp])
+            folds['neg'].append(neg[i*neg_samp:(i+1)*neg_samp])
+        else:
+            folds['pos'].append(pos[i*pos_samp:])
+            folds['neg'].append(neg[i*neg_samp:])
+    
+    # DEBUG
+    # count = 0
+    # for i in folds['pos']:
+    #     for j in i:
+    #         count += 1
+    # print folds['pos'][0], 'Pos:', len(folds['pos']), count
+
+    for cls in ('pos', 'neg'):
+        for i in range(len(folds[cls])):
+            fold = {}
+            # test
+            fold['test'] = folds[cls][i]
+            # train. grab the rest
+            fold['train'] = pd.Series()
+            for j in range(len(folds[cls])):
+                if i != j:
+                    fold['train'] = pd.concat([fold['train'], folds[cls][j]])
+            folded[cls].append(fold)
+
+    # print folded['pos']
+
+    return folded
+
+"""
+Import of the WordNetLemmatizer from NLTK to be used in sklearn
+"""
+from nltk import word_tokenize
+from nltk.stem import WordNetLemmatizer
+
+
+class LemmaTokenizer(object):
+    def __init__(self):
+        self.wnl = WordNetLemmatizer()
+    def __call__(self, doc):
+        return [self.wnl.lemmatize(t) for t in word_tokenize(doc)]
 

@@ -11,18 +11,18 @@ verbose = True
 train_sample_rate = 0.9
 input_col = 'rev_text_lemm'
 # DEBUG coded_lines temp var until all lines have been coded
-coded_lines = sys.argv[2] if len(sys.argv) > 2 else 4998
+# coded_lines = sys.argv[2] if len(sys.argv) > 2 else 4998
 feature = eval(sys.argv[1]) if len(sys.argv) > 1 else unigram_boolean_features
 
-
-df = pd.read_excel('../proc/sentences_lemm_lab.xlsx')[1:coded_lines+1]
-d = {'dimension': [], 'mif': [], 'pos_accuracy': [], 'pos_precision': [], 'pos_recall': [], 'pos_fmeasure': [], 'neg_accuracy': [], 'neg_precision': [], 'neg_recall': [], 'neg_fmeasure': [], 'ave_accuracy': [], 'ave_precision': [], 'ave_recall': [], 'ave_fmeasure': []}
+# df = pd.read_excel('../proc/sentences_lemm_lab.xlsx')[1:coded_lines+1]
+df = pd.read_excel('../proc/sentences_lemm_lab.xlsx')[1:]
+d = {'dimension': [], 'neg_train':[], 'pos_train':[], 'mif': [], 'pos_accuracy': [], 'pos_precision': [], 'pos_recall': [], 'pos_fmeasure': [], 'neg_accuracy': [], 'neg_precision': [], 'neg_recall': [], 'neg_fmeasure': [], 'ave_accuracy': [], 'ave_precision': [], 'ave_recall': [], 'ave_fmeasure': []}
 
 # Randomise the order of the lines
 # df = df.iloc[np.random.permutation(len(df))]
 
 class_labels = (0, -1, 1)   # useful labels being (-1, 1)
-dimensions = df.columns.values[5:6]  # DEBUG array should read [5:], [5:6] is for testing
+dimensions = df.columns.values[5:]  # DEBUG array is [5:6] else should read [5:]
 
 for dimension in dimensions:
     # split the data into class labels (e.g., pos and neg, or more), approx 10% for test, 90% for train
@@ -59,6 +59,8 @@ for dimension in dimensions:
 
     # Store into dict d for df
     d['dimension'].append(dimension)
+    d['neg_train'].append(neg_train)
+    d['pos_train'].append(pos_train)
     d['mif'].append(mif[1:])
     d['pos_accuracy'].append(results['pos']['accuracy'])
     d['pos_precision'].append(results['pos']['precision'])
@@ -75,6 +77,6 @@ for dimension in dimensions:
     d['ave_recall'].append(results['ave']['recall'])
     d['ave_fmeasure'].append(results['ave']['fmeasure'])
 
-out_df = pd.DataFrame(d, columns=['dimension', 'mif', 'pos_accuracy', 'pos_precision', 'pos_recall', 'pos_fmeasure', 'neg_accuracy', 'neg_precision', 'neg_recall', 'neg_fmeasure', 'ave_accuracy', 'ave_precision', 'ave_recall', 'ave_fmeasure'])
+out_df = pd.DataFrame(d, columns=['dimension', 'neg_train', 'pos_train', 'mif', 'pos_accuracy', 'pos_precision', 'pos_recall', 'pos_fmeasure', 'neg_accuracy', 'neg_precision', 'neg_recall', 'neg_fmeasure', 'ave_accuracy', 'ave_precision', 'ave_recall', 'ave_fmeasure'])
 
 out_df.to_excel('../proc/perf_nb_' + feature.__name__ + '.xlsx', index=False)
